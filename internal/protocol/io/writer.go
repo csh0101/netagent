@@ -33,10 +33,6 @@ func DataMessageWriter(clientID, TunnelID uint32, srcAddr string, dstAddr string
 			return 0, err
 		}
 
-		if buf, err = protocol.PackMessage(new(protocol.DataMessage).MsgType(), buf); err != nil {
-			return 0, err
-		}
-
 		if _, err = target.Write(buf); err != nil {
 			return 0, err
 		}
