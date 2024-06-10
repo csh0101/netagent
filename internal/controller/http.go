@@ -3,8 +3,11 @@ package controller
 import (
 	"net/http"
 
+	_ "net/http/pprof"
+
 	"github.com/csh0101/netagent.git/internal/protocol"
 	"github.com/google/uuid"
+	_ "github.com/grafana/pyroscope-go/godeltaprof/http/pprof"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 )
