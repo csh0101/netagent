@@ -7,8 +7,10 @@ import (
 )
 
 // RunkaSocks5 should exist for restart extension
-func RunSocks5(ctx context.Context, f ProxyProcessFunc) error {
-	server, err := net.Listen("tcp", ":1080")
+func RunSocks5(ctx context.Context, port int, f ProxyProcessFunc) error {
+	// todo logger
+	fmt.Println("socks5 proxy server running on port: ", port)
+	server, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 	if err != nil {
 		fmt.Printf("Listen failed: %v\n", err)
 		return nil

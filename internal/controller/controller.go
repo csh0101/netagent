@@ -63,8 +63,8 @@ func (c *Controller) Run(config *Config) error {
 }
 
 func (c *Controller) DataFunc() tcp.HandleFunc {
-
 	return func(ctx context.Context, buf []byte, src net.Conn) ([]byte, net.Conn, error) {
+		fmt.Println("controller...", len(buf))
 		msg := &protocol.DataMessage{}
 		if err := msg.Decode(buf); err != nil {
 			return nil, nil, err
@@ -94,6 +94,12 @@ func (c *Controller) DataFunc() tcp.HandleFunc {
 				}
 			}
 		}
+		// todo ... ? I think the problem occurs in these situation...
+		buf, err := msg.Encode()
+		if err != nil {
+			return nil, nil, err
+		}
+		//
 		return buf, downstream, nil
 	}
 }

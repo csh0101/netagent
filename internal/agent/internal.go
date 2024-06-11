@@ -23,9 +23,13 @@ type Config struct {
 	DataTunnelPort       int
 	ControlTunnelAddress string
 	ControlTunnelPort    int
+	Socks5Port           int
 	Name                 string
 	MaxRetries           int
 }
+
+// 比较合理的方式就是Fork出子进程，主进程通知子进程关闭，主进程重启Fork出一个子进程来建联
+// 但本质上是依赖于本地硬件环境的重启，硬件环境的概率更低了而已。
 
 type Agent struct {
 	ctx       context.Context
@@ -41,8 +45,10 @@ type Agent struct {
 	conf     *Config
 }
 
+// tcp长连接就是会有这个问题...连接过期了怎么管理?
+// todo 怎么设计Agent或者Server重启后的重连策略呢
 func (a *Agent) Run(conf *Config) error {
-
+	fmt.Println("agent name: ", conf.Name, " will run!")
 	// ext for restart , abstract object
 	a.ctx = context.Background()
 	a.local = make(map[string]net.Conn)
@@ -73,6 +79,8 @@ func (a *Agent) Run(conf *Config) error {
 
 	// start hearbeat goroutine
 	go func() {
+		// temp var
+		temp := 0
 		for {
 			err := SendHearbeat(a.control, &protocol.HeartbeatMessage{
 				RequestID:  uuid.New(),
@@ -83,22 +91,36 @@ func (a *Agent) Run(conf *Config) error {
 			if err != nil {
 				// add log warnning
 				fmt.Println("err when send heart beat", err.Error())
+				temp++
+				if temp >= 5 {
+					fmt.Println("快去请....")
+					return
+				}
 				continue
 			}
 			time.Sleep(time.Second * 10)
 		}
 	}()
 	go runDataLoop(a.DataFunc(), a.remote)
-	go socks5.RunSocks5(a.ctx, func(src net.Conn, addr string, port uint16) error {
+	go socks5.RunSocks5(a.ctx, conf.Socks5Port, func(src net.Conn, addr string, port uint16) error {
 		// get local port
-		sourcePort := strings.Split(src.LocalAddr().String(), ":")[1]
+		sourcePort := strings.Split(src.RemoteAddr().String(), ":")[1]
 		localAddr := fmt.Sprintf("%s:%s", util.Uint32ToIP(a.privateIP).String(), sourcePort)
 		writeBack := protocl_io.DataMessageWriter(a.clientID, 0, localAddr, fmt.Sprintf("%s:%d", addr, port), a.remote)
+		// todo 都是bug！！
 		a.mutex.Lock()
 		a.local[localAddr] = src
 		a.mutex.Unlock()
 		go func() {
-			defer src.Close()
+			defer func() {
+				defer src.Close()
+				//todo clean local connection
+				// todo 都是bug
+				a.mutex.Lock()
+				a.local[localAddr] = src
+				a.mutex.Unlock()
+			}()
+
 			io.Copy(writeBack, src)
 		}()
 		return nil
@@ -127,6 +149,9 @@ func (a *Agent) DataFunc() tcp.HandleFunc {
 		dst := protocl_io.DataMessageWriter(a.clientID, msg.TunnelID, msg.DstAddr, msg.SrcAddr, src)
 		if local == nil {
 			ip := "127.0.0.1"
+			if len(strings.Split(msg.DstAddr, ":")) == 0 {
+				fmt.Printf("%v\n", msg)
+			}
 			port := strings.Split(msg.DstAddr, ":")[1]
 			address := fmt.Sprintf("%s:%s", ip, port)
 			src, err := net.Dial("tcp", address)
@@ -146,7 +171,9 @@ func (a *Agent) DataFunc() tcp.HandleFunc {
 			}
 			// assign src to local
 			local = src
+			address = fmt.Sprintf("%s:%s", util.Uint32ToIP(a.privateIP).String(), port)
 			a.mutex.Lock()
+			// todo  这个address 是不是有问题？
 			a.local[address] = src
 			a.mutex.Unlock()
 			go func(src net.Conn, dst io.Writer) {
@@ -166,6 +193,7 @@ func (a *Agent) initControlTunnel() (chan struct{}, error) {
 		conn, err := net.Dial("tcp", fmt.Sprintf("%s:%d", a.conf.ControlTunnelAddress, a.conf.ControlTunnelPort))
 		if err != nil {
 			fmt.Println("err when dial control tcp", err.Error())
+			return err
 		}
 		a.control = conn
 		go a.runControlLoop(a.control)
@@ -216,10 +244,12 @@ func (a *Agent) initDataTunnel() (chan struct{}, error) {
 
 func (a *Agent) registerAgent() (chan struct{}, error) {
 	finished, err := util.GetTaskExecutor().RunTask(context.Background(), "registerAgent", func() error {
+		// backoff ?
 		err := RegisterSelf(a.control, &protocol.RegisterReqMessage{
 			RequestID: uuid.New(),
 			AgentName: a.name,
 		})
+		// always get backoff it ? and timeout ?
 		for !a.register.Get() {
 			time.Sleep(time.Microsecond * 501)
 		}

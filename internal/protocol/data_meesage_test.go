@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestDataMessage_EncodeDecode(t *testing.T) {
@@ -25,6 +26,9 @@ func TestDataMessage_EncodeDecode(t *testing.T) {
 		t.Fatalf("Failed to encode message: %v", err)
 	}
 
+	_, encoded, err = UnPackMessage(bytes.NewBuffer(encoded))
+
+	assert.Nil(t, err)
 	// Decode the encoded message
 	decodedMsg := &DataMessage{}
 	err = decodedMsg.Decode(encoded)

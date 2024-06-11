@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 
 	"github.com/csh0101/netagent.git/internal/util"
@@ -152,7 +153,8 @@ func (s *Server) dealConnection(ctx context.Context, conn net.Conn) {
 	defer conn.Close()
 	for {
 		err := s.handlers.doHandler(ctx, conn)
-		if err != nil {
+		// todo why io.EOF will occur here..?
+		if err != nil && err != io.EOF {
 			fmt.Printf("%s occur err %s,then close conn\n", s.Name, err.Error())
 			// todo are there to split
 			conn.Close()

@@ -31,10 +31,14 @@ func RootCmd() *cobra.Command {
 	return root
 }
 
+// todo! replace it with viper
 var (
 	dport     string
 	cport     string
+	dAddress  string
+	cAddress  string
 	agentName string
+	sPort     string
 )
 
 func AgentCmd() (*cobra.Command, error) {
@@ -46,9 +50,12 @@ func AgentCmd() (*cobra.Command, error) {
 			}
 		},
 	}
-	agentCmd.Flags().StringVar(&dport, "dport", "9999", "data tunnel address")
-	agentCmd.Flags().StringVar(&cport, "cport", "8888", "control tunnel address")
-	agentCmd.Flags().StringVar(&agentName, "agentName", "agent-dev0", "netagent")
+	agentCmd.Flags().StringVar(&dport, "dport", "9999", "data tunnel port")
+	agentCmd.Flags().StringVar(&dAddress, "daddress", "127.0.0.1", "data tunnel address")
+	agentCmd.Flags().StringVar(&cport, "cport", "8888", "control tunnel port")
+	agentCmd.Flags().StringVar(&cAddress, "caddress", "127.0.0.1", "control tunnel address")
+	agentCmd.Flags().StringVar(&agentName, "name", "agent-dev0", "netagent")
+	agentCmd.Flags().StringVar(&sPort, "socks_port", "1080", "socks5 port & ingress port")
 	if err := agentCmd.Flags().Parse(nil); err != nil {
 		return nil, err
 	}
@@ -69,13 +76,19 @@ func agentCmd() error {
 		return err
 	}
 
+	socks5Port, err := strconv.Atoi(sPort)
+	if err != nil {
+		return err
+	}
+
 	if err := a.Run(&agent.Config{
-		Name:                 "agent-dev1",
-		DataTunnelAddress:    "127.0.0.1",
+		Name:                 agentName,
+		DataTunnelAddress:    dAddress,
 		DataTunnelPort:       dataPort,
-		ControlTunnelAddress: "127.0.0.1",
+		ControlTunnelAddress: cAddress,
 		ControlTunnelPort:    controlPort,
 		MaxRetries:           5,
+		Socks5Port:           socks5Port,
 	}); err != nil {
 		return err
 	}
